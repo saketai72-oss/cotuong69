@@ -1,0 +1,232 @@
+.xiangqi-board-frame {
+  --board-ink: #79502b;
+  position: relative;
+  width: min(100%, 600px);
+  margin: 0 auto;
+  padding: 20px 0 21px;
+  border: 1px solid rgba(255, 255, 255, .07);
+  border-radius: 10px;
+  background: linear-gradient(145deg, #202526, #111617);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, .32), inset 0 1px rgba(255,255,255,.035);
+}
+
+.xiangqi-board {
+  display: block;
+  width: 100%;
+  overflow: visible;
+}
+
+.board-paper {
+  stroke: #ddbd8b;
+  stroke-width: 1.5;
+  filter: drop-shadow(0 5px 12px rgba(45, 27, 11, .2));
+}
+
+.board-wood-mat {
+  stroke: #e2b678;
+  stroke-width: 2;
+  filter: drop-shadow(0 8px 12px rgba(54, 31, 12, .28));
+}
+
+.board-wood-inset {
+  fill: none;
+  stroke: rgba(79, 44, 20, .7);
+  stroke-width: 1.5;
+}
+
+.board-border {
+  fill: none;
+  stroke: rgba(132, 87, 43, .58);
+  stroke-width: 1.5;
+}
+
+.board-lines {
+  fill: none;
+  stroke: #80552f;
+  stroke-width: 2.4;
+  stroke-linecap: square;
+  opacity: .91;
+}
+
+.board-details {
+  fill: none;
+  stroke: rgba(115, 75, 39, .72);
+  stroke-linecap: square;
+  stroke-width: 1.4;
+  pointer-events: none;
+}
+
+.board-corner-ornaments {
+  stroke: rgba(137, 91, 48, .7);
+  stroke-width: 1.5;
+}
+
+.board-corner-ornaments circle {
+  fill: #a77a48;
+  stroke: #f0d7aa;
+  stroke-width: 1;
+}
+
+.river-label {
+  fill: #79512e;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 25px;
+  font-weight: 700;
+  letter-spacing: 2.5px;
+  opacity: .88;
+}
+
+.board-coordinates {
+  fill: #9b7650;
+  font-family: "DM Mono", monospace;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.board-coordinate {
+  position: absolute;
+  left: 6.4%;
+  right: 6.4%;
+  display: flex;
+  justify-content: space-between;
+  color: #6d7779;
+  font: 10px "DM Mono", monospace;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.coordinate-top { top: 8px; }
+.coordinate-bottom { bottom: 7px; }
+
+.xiangqi-piece {
+  cursor: default;
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: filter .18s ease, transform .18s ease;
+}
+
+.xiangqi-piece:hover { filter: brightness(1.06) drop-shadow(0 3px 3px rgba(56, 31, 14, .26)); }
+
+.piece-shadow {
+  fill: rgba(52, 32, 17, .3);
+}
+
+.piece-edge {
+  fill: #684a2d;
+  stroke: #f0d8ad;
+  stroke-width: 1.8;
+}
+
+.piece-bevel {
+  fill: #d1b78a;
+  stroke: rgba(92, 60, 32, .9);
+  stroke-width: 1.4;
+}
+
+.piece-face {
+  fill: url(#piece-ivory);
+  stroke-width: 1.9;
+  filter: drop-shadow(0 -1.5px rgba(255, 255, 255, .85));
+}
+
+.xiangqi-piece.red .piece-face { stroke: #a74335; }
+.xiangqi-piece.black .piece-face { stroke: #454640; }
+
+.piece-inner-ring {
+  fill: none;
+  stroke-width: 1.1;
+  opacity: .76;
+}
+
+.xiangqi-piece.red .piece-inner-ring { stroke: #cb7861; }
+.xiangqi-piece.black .piece-inner-ring { stroke: #777267; }
+
+.piece-glint {
+  fill: none;
+  stroke: rgba(255, 255, 255, .92);
+  stroke-linecap: round;
+  stroke-width: 2;
+}
+
+.piece-label {
+  font-family: "Arial", "DM Sans", sans-serif;
+  font-weight: 700;
+  letter-spacing: -.7px;
+  paint-order: stroke;
+  stroke: rgba(255, 248, 230, .75);
+  stroke-width: .6px;
+}
+
+.piece-label-general { font-size: 14px; letter-spacing: -1.2px; }
+.piece-label-advisor, .piece-label-horse, .piece-label-chariot { font-size: 21px; }
+.piece-label-elephant { font-size: 14px; letter-spacing: -1.2px; }
+.piece-label-cannon { font-size: 16px; letter-spacing: -1px; }
+.piece-label-soldier { font-size: 17px; letter-spacing: -1px; }
+
+.xiangqi-piece.red .piece-label { fill: url(#piece-red-ink); }
+.xiangqi-piece.black .piece-label { fill: url(#piece-black-ink); }
+
+.board-readonly-tag {
+  position: absolute;
+  top: -12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 9px;
+  border: 1px solid rgba(132, 163, 143, .34);
+  border-radius: 999px;
+  background: #202a27;
+  color: #c3d1c6;
+  font: 700 8px "DM Mono", monospace;
+  letter-spacing: .07em;
+}
+
+.board-readonly-tag span { color: #718c77; font-size: 11px; }
+
+.countdown-overlay {
+  position: absolute;
+  inset: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  border-radius: 5px;
+  background: rgba(15, 20, 22, .78);
+  color: #f6f0e5;
+  backdrop-filter: blur(3px);
+}
+
+.countdown-caption {
+  color: #c6b99f;
+  font: 600 10px "DM Mono", monospace;
+  letter-spacing: .2em;
+}
+
+.countdown-number {
+  display: grid;
+  width: 92px;
+  height: 92px;
+  place-items: center;
+  border: 1px solid rgba(220, 185, 124, .68);
+  border-radius: 50%;
+  color: #f0c878;
+  font: 400 52px Georgia, serif;
+  animation: countdown-pop .8s ease both;
+}
+
+.countdown-subtitle {
+  color: #a9aaa3;
+  font-size: 12px;
+}
+
+@keyframes countdown-pop {
+  from { transform: scale(1.2); opacity: .3; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .countdown-number, .xiangqi-piece { animation: none; transition: none; }
+}

@@ -55,3 +55,11 @@ backend/src/
    - Lưu vào CSDL qua `IUserRepository.create()`.
 4. **Infrastructure (`PgUserRepository`)**: Thực thi câu lệnh SQL INSERT vào PostgreSQL.
 5. **Presentation (`AuthController`)**: Trả mã HTTP `201 Created` về cho Client.
+
+---
+
+## Match API phát triển cho COT-615
+
+Chạy `npm start` để khởi động HTTP server tại cổng 5000 (có thể đổi bằng biến môi trường `PORT`). `GET /api/matches/COT-615` trả DTO Match chỉ đọc gồm 32 quân, người chơi, bên đi trước, trạng thái countdown và đồng hồ do server tính. Đồng hồ mẫu bắt đầu ở 2 phút mỗi bên. Các yêu cầu cập nhật trận bị từ chối để client khán giả không thể điều khiển quân.
+
+Đây là Match mẫu trong bộ nhớ, được khởi tạo khi có lượt đọc đầu tiên sau khi server khởi động; countdown bắt đầu từ lúc đó và Match được khởi tạo lại khi server restart. Nó chưa được gắn vào room lifecycle, tài khoản/xác thực, lưu trữ DB hay Socket.IO. Không dùng endpoint/match mẫu này như backend game production.

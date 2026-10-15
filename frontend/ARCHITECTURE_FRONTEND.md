@@ -53,3 +53,13 @@ frontend/src/
 3. **Phân Công Song Song (Nhóm 7 người)**:
    - Thành viên làm giao diện (FE UI) tập trung ở `presentation/components` và `presentation/pages`.
    - Thành viên làm luật cờ/realtime tập trung ở `domain/entities` và `application/use-cases/game`.
+
+---
+
+## Match view cho bàn cờ COT-615
+
+`presentation/components/board/XiangqiBoard` nhận `pieces` dưới dạng mảng quân `{ id, color, type, position }`, trong đó `color` là `red` hoặc `black`, `type` là `general`, `advisor`, `elephant`, `horse`, `chariot`, `cannon` hoặc `soldier`, và `position` là tọa độ như `e0`. Bàn cờ chỉ hiển thị trạng thái, không gắn thao tác kéo/thả hay đi quân.
+
+Màn hình tải dữ liệu qua `application/hooks/useMatch` và `infrastructure/api/matchApi` từ `GET /api/matches/:matchId` (mặc định `COT-615`, có thể chọn bằng query `?matchId=...`). Dữ liệu được làm mới mỗi giây; countdown và đồng hồ là giá trị do server tính từ thời điểm phân bên/bắt đầu. Frontend không cung cấp thao tác cập nhật trận; endpoint hiện tại chỉ đọc để hỗ trợ chế độ khán giả.
+
+Backend hiện cung cấp Match mẫu trong bộ nhớ cho `COT-615`; trạng thái được khởi tạo lại khi tiến trình backend khởi động và chưa nối vào luồng phòng, xác thực người chơi, cơ sở dữ liệu trận đấu hoặc WebSocket. Đây là adapter end-to-end để phát triển/giao diện COT-615, chưa phải hệ thống trận đấu production. Khi room/game backend thực tế sẵn sàng, thay nguồn khởi tạo Match ở backend để trả cùng DTO, rồi giữ nguyên giao diện đọc Match.
