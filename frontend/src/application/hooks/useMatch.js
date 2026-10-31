@@ -220,6 +220,7 @@ export function useMatch(matchId, { roomCode = null } = {}) {
       setState((current) => ({ ...current, error: message.message || message.error || 'Máy chủ từ chối yêu cầu.' }));
     }
   }, [reconnectManager]);
+  // useRoomSignaling(roomCode, deliverSignaling, deliverChat)
   const roomSignaling = useRoomSignaling(roomCode, deliverSignaling, deliverChat, handleRoomMessage);
   const sendRoomMessage = roomSignaling.send;
   const isRoomSocketReady = roomSignaling.isReady;
@@ -576,6 +577,10 @@ export function useMatch(matchId, { roomCode = null } = {}) {
     return true;
   }, [reconnectManager, roomCode, isRoomSocketReady, sendRoomMessage]);
 
+  const clearMoveError = useCallback(() => {
+    setState((current) => ({ ...current, moveError: null }));
+  }, []);
+
   const requestLegalMoves = useCallback((from) => {
     if (roomCode) {
       if (!isRoomSocketReady()) {
@@ -594,10 +599,6 @@ export function useMatch(matchId, { roomCode = null } = {}) {
     socket.send(JSON.stringify({ type: 'legalMoves', from }));
     return true;
   }, [roomCode, isRoomSocketReady, sendRoomMessage]);
-
-  const clearMoveError = useCallback(() => {
-    setState((current) => ({ ...current, moveError: null }));
-  }, []);
 
   // Các hàm hỗ trợ mô phỏng test hoặc tương tác thủ công
   const simulateSelfDisconnect = useCallback(() => {
