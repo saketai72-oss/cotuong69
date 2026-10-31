@@ -26,7 +26,8 @@ function SeatCard({ kind, color, active, children }) {
 export default function PveScreen({ matchId, api }) {
   const {
     match, pieces, loading, error, moveError, clearMoveError, pending, resigning,
-    isPlayerTurn, canMove, remainingMs, makeMove, resign, refresh,
+    isPlayerTurn, canMove, legalMoves, lastMove, lastMoves, remainingMs,
+    makeMove, requestLegalMoves, resign, refresh,
   } = usePveMatch(matchId, { api });
   const [confirmingResign, setConfirmingResign] = useState(false);
   const [resultDismissed, setResultDismissed] = useState(false);
@@ -88,6 +89,7 @@ export default function PveScreen({ matchId, api }) {
 
   let turnText;
   if (finished) turnText = 'Ván đấu đã kết thúc';
+  else if (pending && botThinking) turnText = 'Máy đang suy nghĩ…';
   else if (pending) turnText = 'Đang gửi nước đi…';
   else if (botThinking) turnText = 'Máy đang đi…';
   else turnText = 'Đến lượt bạn';
@@ -115,7 +117,12 @@ export default function PveScreen({ matchId, api }) {
               playerColor={playerColor}
               interactive={canMove}
               movePending={pending}
+              legalMoves={legalMoves}
+              lastMove={lastMove}
+              lastMoves={lastMoves}
+              animateMoves
               orientation={playerColor}
+              onSelectPiece={requestLegalMoves}
               onMove={makeMove}
             />
           </div>

@@ -8,19 +8,22 @@ import { classifyServerMessage } from '../../domain/network/signalingMessages';
 const MAX_UNOPENED_ATTEMPTS = 5;
 
 /**
- * FE-01: kênh signaling qua socket roomHub (/ws/room/:code) khi URL có `roomCode`.
- * Chỉ chuyển tiếp các gói `Call*` / lỗi cuộc gọi cho `onMessage`; mọi thông điệp phòng khác bỏ qua.
+ * Kênh game, chat và signaling qua socket roomHub (/ws/room/:code) khi URL có `roomCode`.
+ * Gói `Call*` và chat đi qua callback riêng; trạng thái phòng được chuyển cho `onRoomMessage`.
  *
  * @param {string|null} roomCode
  * @param {(message:object)=>void} onMessage
  * @param {(message:object)=>void} [onChat] FE-05: `ChatMessage` / `ChatError` của khung chat
+ * @param {(message:object)=>void} [onRoomMessage] Trạng thái phòng và ván đấu
  */
-export function useRoomSignaling(roomCode, onMessage, onChat) {
+export function useRoomSignaling(roomCode, onMessage, onChat, onRoomMessage) {
   const socketRef = useRef(null);
   const onMessageRef = useRef(onMessage);
   onMessageRef.current = onMessage;
   const onChatRef = useRef(onChat);
   onChatRef.current = onChat;
+  const onRoomMessageRef = useRef(onRoomMessage);
+  onRoomMessageRef.current = onRoomMessage;
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -39,7 +42,10 @@ export function useRoomSignaling(roomCode, onMessage, onChat) {
         // Token đi qua Sec-WebSocket-Protocol (FE-06), không nằm trong URL
         socket = new WebSocket(roomWebSocketUrl(roomCode), matchWebSocketProtocols());
       } catch {
-        setError('Không tạo được kênh gọi video của phòng.');
+        setError('Không tạo được kết nối tới phòng.');
+        if (typeof onRoomMessageRef.current === 'function') {
+          onRoomMessageRef.current({ type: 'RoomDisconnected' });
+        }
         return;
       }
       socketRef.current = socket;
@@ -65,6 +71,8 @@ export function useRoomSignaling(roomCode, onMessage, onChat) {
           onMessageRef.current(routed.message);
         } else if (routed.kind === 'chat' && typeof onChatRef.current === 'function') {
           onChatRef.current(routed.message);
+        } else if (typeof onRoomMessageRef.current === 'function') {
+          onRoomMessageRef.current(message);
         }
       });
 
@@ -79,14 +87,17 @@ export function useRoomSignaling(roomCode, onMessage, onChat) {
             message: 'Mất kết nối máy chủ nên cuộc gọi video đã kết thúc.',
           });
         }
+        if (typeof onRoomMessageRef.current === 'function') {
+          onRoomMessageRef.current({ type: 'RoomDisconnected' });
+        }
         if (isFatalCloseCode(event && event.code)) {
-          setError('Máy chủ từ chối kênh gọi video của phòng.');
+          setError('Máy chủ từ chối kết nối tới phòng.');
           return;
         }
         if (!opened) {
           unopened += 1;
           if (unopened >= MAX_UNOPENED_ATTEMPTS) {
-            setError('Không kết nối được kênh gọi video của phòng (hãy đăng nhập và kiểm tra mã phòng).');
+            setError('Không kết nối được máy chủ phòng (hãy đăng nhập và kiểm tra mã phòng).');
             return;
           }
         }

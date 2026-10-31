@@ -311,6 +311,40 @@ describe('Nghiệm thu Task COT-592: Cấu hình WebSocket Hub & Phân chia vai 
   });
 
   describe('5. Điều kiện Bắt đầu trận đấu & Chống spam duplicate match', () => {
+    test('RoomHub cấp snapshot khai cuộc và trả gợi ý hợp lệ trước khi nhận nước đi', async () => {
+      const gameRoom = roomManager.createRoom({ hostUser, name: 'Phòng Gameplay' });
+      const { ws: hostWs, messages: hostMsgs } = await connectWs(hostToken, gameRoom.code);
+      const { ws: oppWs, messages: oppMsgs } = await connectWs(opponentToken, gameRoom.code);
+      await waitForMessage(hostMsgs, (m) => m.type === 'Connected');
+      await waitForMessage(oppMsgs, (m) => m.type === 'Connected');
+
+      hostWs.send(JSON.stringify({ type: 'ready', isReady: true }));
+      oppWs.send(JSON.stringify({ type: 'ready', isReady: true }));
+      await waitForMessage(hostMsgs, (m) => m.type === 'ReadyStateChanged' && m.allReady);
+
+      hostWs.send(JSON.stringify({ type: 'start' }));
+      const startEvt = await waitForMessage(hostMsgs, (m) => m.type === 'GameStarted');
+      assert.equal(startEvt.snapshot.currentTurn, 'red');
+      assert.equal(startEvt.snapshot.board.length, 32);
+
+      const { ws: spectatorWs, messages: spectatorMsgs } = await connectWs(spectatorToken1, gameRoom.code);
+      const spectatorConnected = await waitForMessage(spectatorMsgs, (m) => m.type === 'Connected');
+      assert.equal(spectatorConnected.snapshot.board.length, 32);
+
+      hostWs.send(JSON.stringify({ type: 'legalMoves', from: 'a3' }));
+      const legalMoves = await waitForMessage(hostMsgs, (m) => m.type === 'legalMovesResult' && m.from === 'a3');
+      assert.deepEqual(legalMoves.destinations, ['a4']);
+
+      hostWs.send(JSON.stringify({ type: 'move', from: 'a3', to: 'a4' }));
+      const moveResult = await waitForMessage(hostMsgs, (m) => m.type === 'moveResult' && m.accepted);
+      assert.equal(moveResult.snapshot.currentTurn, 'black');
+      assert.equal(moveResult.snapshot.lastMove.to, 'a4');
+
+      hostWs.close();
+      oppWs.close();
+      spectatorWs.close();
+    });
+
     test('Chưa đủ 2 người hoặc chưa cùng sẵn sàng -> Không cho bắt đầu trận', async () => {
       const startRoom = roomManager.createRoom({ hostUser, name: 'Phòng Test Start' });
       const { ws: hostWs, messages: hostMsgs } = await connectWs(hostToken, startRoom.code);

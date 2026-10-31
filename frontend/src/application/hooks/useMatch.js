@@ -65,8 +65,8 @@ function withCheckStatus(serverState, message, previousMatch) {
 
 /**
  * @param {string|null} matchId
- * @param {{roomCode?: string|null}} [options] FE-01: có roomCode -> signaling cuộc gọi đi qua socket
- *   roomHub (/ws/room/:code); chỉ có matchId (trận demo) -> đi qua chính WS của trận.
+ * @param {{roomCode?: string|null}} [options] Có roomCode thì game, chat và cuộc gọi dùng
+ *   roomHub (/ws/room/:code); chỉ có matchId thì dùng WebSocket trận demo.
  */
 export function useMatch(matchId, { roomCode = null } = {}) {
   const reconnectManager = useMemo(() => new ReconnectManager({ maxWaitSeconds: 60 }), []);
@@ -74,7 +74,7 @@ export function useMatch(matchId, { roomCode = null } = {}) {
 
   const [state, setState] = useState({
     match: null,
-    loading: true,
+    loading: Boolean(matchId || roomCode),
     error: null,
     color: null,
     readOnly: true,
@@ -82,6 +82,7 @@ export function useMatch(matchId, { roomCode = null } = {}) {
     movePending: false,
     moveError: null,
     moveResult: null,
+    legalMoves: null,
   });
   const socketRef = useRef(null);
   const pendingRef = useRef(false);
@@ -98,7 +99,131 @@ export function useMatch(matchId, { roomCode = null } = {}) {
       chatHandlerRef.current(message);
     }
   }, []);
-  const roomSignaling = useRoomSignaling(roomCode, deliverSignaling, deliverChat);
+  const handleRoomMessage = useCallback((message) => {
+    if (message.type === 'RoomDisconnected') {
+      reconnectManager.handleSelfDisconnect('ROOM_SOCKET_DISCONNECTED');
+      pendingRef.current = false;
+      setState((current) => ({
+        ...current,
+        connected: false,
+        movePending: false,
+        legalMoves: null,
+      }));
+      return;
+    }
+
+    if (message.type === 'Connected' || message.type === 'reconnectState' || message.type === 'GameStarted') {
+      reconnectManager.handleSelfReconnect();
+      const side = message.side || message.room?.side;
+      const normalizedSide = typeof side === 'string' ? side.toLowerCase() : null;
+      const assignedColor = isMatchColor(normalizedSide) ? normalizedSide : null;
+      const hasRole = message.type !== 'GameStarted';
+      const readOnly = hasRole ? message.role === 'SPECTATOR' || !assignedColor : null;
+      const snapshot = message.snapshot || message.state;
+      setState((current) => {
+        const restoredMatch = snapshot
+          ? BoardSyncManager.restoreFromSnapshot(snapshot, current.match)
+          : current.match;
+        return {
+          ...current,
+          match: restoredMatch ? withCheckStatus(restoredMatch, message, current.match) : null,
+          color: assignedColor || current.color,
+          readOnly: readOnly === null ? current.readOnly : readOnly,
+          loading: snapshot ? false : current.loading,
+          connected: true,
+          error: null,
+        };
+      });
+      if (message.type === 'GameStarted') reconnectManager.clearServerResult();
+      return;
+    }
+
+    if (message.type === 'legalMovesResult') {
+      setState((current) => ({
+        ...current,
+        legalMoves: {
+          from: message.from,
+          destinations: Array.isArray(message.destinations) ? message.destinations : [],
+        },
+      }));
+      return;
+    }
+
+    if (message.type === 'moveResult') {
+      pendingRef.current = false;
+      setState((current) => {
+        const snapshot = message.snapshot || message.state;
+        const restoredMatch = snapshot
+          ? BoardSyncManager.restoreFromSnapshot(snapshot, current.match)
+          : current.match;
+        return {
+          ...current,
+          movePending: false,
+          moveError: message.accepted ? null : message.error,
+          moveResult: message.accepted ? message : null,
+          legalMoves: null,
+          match: restoredMatch ? withCheckStatus(restoredMatch, message, current.match) : null,
+        };
+      });
+      return;
+    }
+
+    if (message.type === 'opponentDisconnected') {
+      reconnectManager.handleOpponentDisconnect({
+        player: message.player || 'opponent',
+        countdownSeconds: message.countdownSeconds || 60,
+      });
+      return;
+    }
+
+    if (message.type === 'opponentReconnected') {
+      reconnectManager.handleOpponentReconnect();
+      if (message.snapshot || message.state) {
+        setState((current) => {
+          const restoredMatch = BoardSyncManager.restoreFromSnapshot(
+            message.snapshot || message.state,
+            current.match,
+          );
+          return {
+            ...current,
+            match: withCheckStatus(restoredMatch, message, current.match),
+          };
+        });
+      }
+      return;
+    }
+
+    if (message.type === 'matchEnded' || message.type === 'match:ended') {
+      reconnectManager.handleServerMatchResult({
+        winner: message.winner,
+        winnerColor: message.winnerColor,
+        reason: message.reason || message.endReason,
+        message: message.message,
+      });
+      if (message.snapshot) {
+        setState((current) => {
+          const restoredMatch = BoardSyncManager.restoreFromSnapshot(message.snapshot, current.match);
+          return {
+            ...current,
+            match: withCheckStatus(restoredMatch, message, current.match),
+          };
+        });
+      }
+      return;
+    }
+
+    const routed = classifyServerMessage(message, { movePending: pendingRef.current });
+    if (routed.kind === 'moveError') {
+      pendingRef.current = false;
+      setState((current) => ({ ...current, movePending: false, moveError: routed.error }));
+    } else if (message.type === 'error') {
+      setState((current) => ({ ...current, error: message.message || message.error || 'Máy chủ từ chối yêu cầu.' }));
+    }
+  }, [reconnectManager]);
+  // useRoomSignaling(roomCode, deliverSignaling, deliverChat)
+  const roomSignaling = useRoomSignaling(roomCode, deliverSignaling, deliverChat, handleRoomMessage);
+  const sendRoomMessage = roomSignaling.send;
+  const isRoomSocketReady = roomSignaling.isReady;
   const roomCodeRef = useRef(roomCode);
   roomCodeRef.current = roomCode;
   // FE-08: sự kiện `online` của trình duyệt gọi hàm này để kết nối lại NGAY (không chờ backoff)
@@ -149,6 +274,9 @@ export function useMatch(matchId, { roomCode = null } = {}) {
   }, [reconnectManager]);
 
   useEffect(() => {
+    if (roomCode) {
+      return undefined;
+    }
     if (!matchId) {
       return undefined;
     }
@@ -302,9 +430,18 @@ export function useMatch(matchId, { roomCode = null } = {}) {
                   movePending: false,
                   moveError: message.accepted ? null : message.error,
                   moveResult: message.accepted ? message : null,
+                  legalMoves: null,
                   match,
                 };
               });
+            } else if (message.type === 'legalMovesResult') {
+              setState((current) => ({
+                ...current,
+                legalMoves: {
+                  from: message.from,
+                  destinations: Array.isArray(message.destinations) ? message.destinations : [],
+                },
+              }));
             } else if (message.type === 'error' || ['call', 'chat'].includes(classifyServerMessage(message).kind)) {
               // FE-01: gói Call* và lỗi của cuộc gọi đi tới CallController (COT-629);
               // FE-05: ChatMessage và lỗi chat đi tới khung chat;
@@ -407,7 +544,7 @@ export function useMatch(matchId, { roomCode = null } = {}) {
       // đổi matchId xong giao diện sẽ không còn nhận cập nhật. Chỉ dừng đếm ngược.
       reconnectManager.stopCountdownTimer();
     };
-  }, [matchId, reconnectManager]);
+  }, [matchId, roomCode, reconnectManager]);
 
   const sendMove = useCallback((from, to) => {
     // COT-601 AC 2: Khóa toàn bộ thao tác gửi nước đi khi đang mất kết nối
@@ -417,7 +554,8 @@ export function useMatch(matchId, { roomCode = null } = {}) {
       return false;
     }
     const socket = socketRef.current;
-    if (!socket || socket.readyState !== WebSocket.OPEN) {
+    const roomReady = roomCode && isRoomSocketReady();
+    if ((!roomCode && (!socket || socket.readyState !== WebSocket.OPEN)) || (roomCode && !roomReady)) {
       setState((current) => ({ ...current, moveError: 'Chưa kết nối máy chủ nên chưa gửi được nước đi.' }));
       return false;
     }
@@ -427,13 +565,40 @@ export function useMatch(matchId, { roomCode = null } = {}) {
     }
     pendingRef.current = true;
     setState((current) => ({ ...current, movePending: true, moveError: null, moveResult: null }));
-    socket.send(JSON.stringify({ type: 'move', from, to }));
+    if (roomCode) {
+      if (!sendRoomMessage({ type: 'move', from, to })) {
+        pendingRef.current = false;
+        setState((current) => ({ ...current, movePending: false, moveError: 'Chưa kết nối máy chủ nên chưa gửi được nước đi.' }));
+        return false;
+      }
+    } else {
+      socket.send(JSON.stringify({ type: 'move', from, to }));
+    }
     return true;
-  }, [reconnectManager]);
+  }, [reconnectManager, roomCode, isRoomSocketReady, sendRoomMessage]);
 
   const clearMoveError = useCallback(() => {
     setState((current) => ({ ...current, moveError: null }));
   }, []);
+
+  const requestLegalMoves = useCallback((from) => {
+    if (roomCode) {
+      if (!isRoomSocketReady()) {
+        setState((current) => ({ ...current, legalMoves: null }));
+        return false;
+      }
+      setState((current) => ({ ...current, legalMoves: null }));
+      return sendRoomMessage({ type: 'legalMoves', from });
+    }
+    const socket = socketRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      setState((current) => ({ ...current, legalMoves: null }));
+      return false;
+    }
+    setState((current) => ({ ...current, legalMoves: null }));
+    socket.send(JSON.stringify({ type: 'legalMoves', from }));
+    return true;
+  }, [roomCode, isRoomSocketReady, sendRoomMessage]);
 
   // Các hàm hỗ trợ mô phỏng test hoặc tương tác thủ công
   const simulateSelfDisconnect = useCallback(() => {
@@ -487,8 +652,10 @@ export function useMatch(matchId, { roomCode = null } = {}) {
 
   return {
     ...state,
+    error: roomCode ? roomSignaling.error || state.error : state.error,
     socketRef,
     sendMove,
+    requestLegalMoves,
     clearMoveError,
     sendSignaling,
     isSignalingReady,

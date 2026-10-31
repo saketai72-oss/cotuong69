@@ -98,6 +98,7 @@ describe('FE-10: API chơi với máy', () => {
     assert.equal((await api('POST', '/api/pve/matches', { body: { playerColor: 'red' } })).status, 401);
     assert.equal((await api('GET', '/api/pve/matches/1')).status, 401);
     assert.equal((await api('POST', '/api/pve/matches/1/moves', { body: {} })).status, 401);
+    assert.equal((await api('POST', '/api/pve/matches/1/legal-moves', { body: {} })).status, 401);
     assert.equal((await api('POST', '/api/pve/matches/1/resign')).status, 401);
   });
 
@@ -113,6 +114,34 @@ describe('FE-10: API chơi với máy', () => {
     assert.equal(json.match.hasEloRating, false);
     assert.equal(json.botMove, null);
     await api('POST', `/api/pve/matches/${json.match.id}/resign`, { token: tokens.alice });
+  });
+
+  it('trả điểm đến hợp lệ cho quân người chơi và không rò rỉ danh sách của phe đối thủ', async () => {
+    const created = (await api('POST', '/api/pve/matches', {
+      token: tokens.alice,
+      body: { playerColor: 'red' },
+    })).json.match;
+
+    const legal = await api('POST', `/api/pve/matches/${created.id}/legal-moves`, {
+      token: tokens.alice,
+      body: { from: 'a3' },
+    });
+    assert.equal(legal.status, 200);
+    assert.deepEqual(legal.json.destinations, ['a4']);
+
+    const opponentPiece = await api('POST', `/api/pve/matches/${created.id}/legal-moves`, {
+      token: tokens.alice,
+      body: { from: 'a6' },
+    });
+    assert.deepEqual(opponentPiece.json.destinations, []);
+
+    const denied = await api('POST', `/api/pve/matches/${created.id}/legal-moves`, {
+      token: tokens.bob,
+      body: { from: 'a3' },
+    });
+    assert.equal(denied.status, 403);
+    assert.equal(denied.json.code, 'NOT_MATCH_OWNER');
+    await api('POST', `/api/pve/matches/${created.id}/resign`, { token: tokens.alice });
   });
 
   it('tạo trận cầm Đen: máy đi trước ngay trong lúc tạo', async () => {

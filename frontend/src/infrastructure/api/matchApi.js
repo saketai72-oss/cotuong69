@@ -25,7 +25,7 @@ export function matchWebSocketUrl(matchId) {
   return url.toString();
 }
 
-// FE-01: WS roomHub (/ws/room/:code) cho signaling cuộc gọi khi URL có roomCode.
+// WS roomHub (/ws/room/:code) cho game, chat và signaling khi URL có roomCode.
 // Dev đi qua proxy /ws của Vite; nếu VITE_API_URL là domain tuyệt đối thì dùng origin của nó.
 export function roomWebSocketUrl(roomCode) {
   const origin = /^https?:\/\//i.test(apiBaseUrl)

@@ -7,8 +7,8 @@
 --    Dùng CASE thay LEAST/GREATEST để chạy được cả PostgreSQL và SQLite.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_friends_unique_pair
   ON friends (
-    CASE WHEN user_id < friend_id THEN user_id ELSE friend_id END,
-    CASE WHEN user_id < friend_id THEN friend_id ELSE user_id END
+    (CASE WHEN user_id < friend_id THEN user_id ELSE friend_id END),
+    (CASE WHEN user_id < friend_id THEN friend_id ELSE user_id END)
   );
 
 -- 2. Bỏ 2 index trùng với ràng buộc UNIQUE có sẵn (tốn chỗ, không dùng)

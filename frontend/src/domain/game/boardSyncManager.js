@@ -149,6 +149,15 @@ class BoardSyncManager {
       capturedPieces,
       currentTurn,
       turnRemainingSeconds,
+      moveNumber: snapshot.plyCount !== undefined
+        ? Number(snapshot.plyCount) + 1
+        : (previousMatch?.moveNumber ?? 1),
+      timeControlSeconds: snapshot.timeControlSeconds !== undefined
+        ? Number(snapshot.timeControlSeconds)
+        : (previousMatch?.timeControlSeconds ?? 300),
+      viewerCount: snapshot.viewerCount !== undefined
+        ? Number(snapshot.viewerCount)
+        : (previousMatch?.viewerCount ?? 0),
       clocks,
       inCheck,
       check: inCheck,

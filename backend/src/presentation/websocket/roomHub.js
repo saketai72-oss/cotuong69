@@ -7,6 +7,7 @@ const { safeDecode } = require('../../core/safeDecode');
 const { onlineUserManager: defaultOnlineUserManager } = require('../../infrastructure/database/repositories/OnlineUserManager');
 const PgPvpMatchRepository = require('../../infrastructure/database/repositories/PgPvpMatchRepository');
 const { roomManager: defaultRoomManager } = require('../../infrastructure/database/repositories/RoomManager');
+const { getLegalMoveDestinations } = require('../../domain/entities/xiangqiRules');
 
 /**
  * BE-07: kiểm tra dữ liệu signaling WebRTC trước khi relay.
@@ -276,6 +277,7 @@ class RoomHub {
         role: roleInfo.role,
         side: roleInfo.side,
         room: room.getSummary(),
+        snapshot: room.getSnapshot(),
       });
 
       // Nếu là người chơi kết nối lại: gửi snapshot khôi phục trạng thái và broadcast Reconnected
@@ -568,7 +570,7 @@ class RoomHub {
       return;
     }
 
-    if (isSpectator && ['ready', 'start', 'demote', 'kick', 'move'].includes(type)) {
+    if (isSpectator && ['ready', 'start', 'demote', 'kick', 'move', 'legalMoves'].includes(type)) {
       this.send(socket, {
         type: 'error',
         code: 'FORBIDDEN',
@@ -613,6 +615,7 @@ class RoomHub {
           type: 'GameStarted',
           matchId: startResult.matchId,
           startedAt: startResult.startedAt,
+          snapshot: room.getSnapshot(),
           room: room.getSummary(),
         });
         // BE-05: bắt đầu chạy đồng hồ của lượt đầu tiên
@@ -620,6 +623,24 @@ class RoomHub {
       } catch (err) {
         this.send(socket, { type: 'error', code: err.code || 'START_ERROR', message: err.message });
       }
+      return;
+    }
+
+    if (type === 'legalMoves') {
+      const playerColor = roleInfo?.side ? roleInfo.side.toLowerCase() : null;
+      const destinations = room.status === 'PLAYING' &&
+        room.matchState &&
+        !room.reconnectState &&
+        !room.matchState.isPaused &&
+        playerColor === room.matchState.currentTurn &&
+        typeof payload.from === 'string'
+        ? getLegalMoveDestinations(room.matchState.board, playerColor, payload.from)
+        : [];
+      this.send(socket, {
+        type: 'legalMovesResult',
+        from: payload.from,
+        destinations,
+      });
       return;
     }
 
@@ -1609,6 +1630,7 @@ class RoomHub {
     this.broadcastToRoom(room.code, {
       type: 'matchEnded',
       matchId,
+      snapshot: room.getSnapshot(),
       // `winner` giữ đúng ngữ nghĩa cũ (màu thắng) để client hiện có không vỡ
       winner: winnerColor || null,
       winnerUserId: winnerUser ? winnerUser.id : null,

@@ -11,6 +11,7 @@ const {
   getPublicMatchState,
   startCot615Match,
 } = require('./domain/entities/cot615Match');
+const { getLegalMoveDestinations } = require('./domain/entities/xiangqiRules');
 const { createMatchesHandler } = require('./presentation/http/routes/matches.routes');
 const { createAuthHandler } = require('./presentation/http/routes/auth.routes');
 const { createUserHandler } = require('./presentation/http/routes/user.routes');
@@ -272,6 +273,18 @@ function createServer(options = {}) {
     // FE-05: chat văn bản đi qua socket trận demo
     if (isChatMessageType(message?.type)) {
       chatRelay.handle(client, clients.get(client) || null, message);
+      return;
+    }
+
+    if (message?.type === 'legalMoves') {
+      const color = clients.get(client);
+      const currentMatch = getCurrentMatch();
+      const state = getPublicMatchState(currentMatch, now());
+      const destinations = color && state.status === 'active' &&
+        currentMatch.currentTurn === color && typeof message.from === 'string'
+        ? getLegalMoveDestinations(currentMatch.board, color, message.from)
+        : [];
+      send(client, { type: 'legalMovesResult', from: message.from, destinations });
       return;
     }
 

@@ -16,7 +16,7 @@ export class PveApiError extends Error {
   }
 }
 
-async function request(method, path, body) {
+async function request(method, path, body, responseType = 'match') {
   const headers = { Accept: 'application/json', ...buildAuthHeaders(TokenStorage.getAccessToken()) };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
 
@@ -47,7 +47,10 @@ async function request(method, path, body) {
       code: (data && data.code) || (response.status === 401 ? 'UNAUTHORIZED' : 'HTTP_ERROR'),
     });
   }
-  if (!data || typeof data !== 'object' || !data.match) {
+  const hasExpectedResponse = responseType === 'match'
+    ? Boolean(data && data.match)
+    : Boolean(data && Array.isArray(data.destinations));
+  if (!data || typeof data !== 'object' || !hasExpectedResponse) {
     throw new PveApiError('Phản hồi từ máy chủ không hợp lệ.', { status: response.status, code: 'INVALID_RESPONSE' });
   }
   return data;
@@ -58,6 +61,12 @@ export function createPveApi() {
     getMatch: (matchId) => request('GET', `/matches/${encodeURIComponent(matchId)}`),
     /** from/to: { row, col } */
     submitMove: (matchId, from, to) => request('POST', `/matches/${encodeURIComponent(matchId)}/moves`, { from, to }),
+    getLegalMoves: (matchId, from) => request(
+      'POST',
+      `/matches/${encodeURIComponent(matchId)}/legal-moves`,
+      { from },
+      'legalMoves',
+    ),
     resign: (matchId) => request('POST', `/matches/${encodeURIComponent(matchId)}/resign`),
   };
 }

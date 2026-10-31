@@ -11,6 +11,7 @@
  */
 const { PgPveMatchRepository } = require('../../../../infrastructure/database/repositories/PgPveMatchRepository');
 const { PVE_MATCH_STATUS, PLAYER_TURN_LIMIT_MS } = require('../../../../domain/entities/PveMatch');
+const { getLegalMovesForPiece } = require('../../../../domain/rules/moveGenerator');
 const { AppError, ERROR_CODES } = require('../../../../core/errors/AppError');
 const { createPveUseCases } = require('./index');
 const { loadOwnedMatch } = require('./loadOwnedMatch');
@@ -153,6 +154,29 @@ function createPveService({
       await loadOwnedMatch(pveMatchRepository, matchId, userId);
       const advanced = await advanceMatch(matchId);
       return { match: view(advanced) };
+    },
+
+    async getLegalMoves({ userId, matchId, from }) {
+      await loadOwnedMatch(pveMatchRepository, matchId, userId);
+      const match = await advanceMatch(matchId);
+      if (
+        match.status !== PVE_MATCH_STATUS.PLAYING ||
+        match.sideToMove !== match.playerColor ||
+        typeof from !== 'string' ||
+        !/^[a-i][0-9]$/.test(from)
+      ) {
+        return { destinations: [] };
+      }
+
+      const col = from.charCodeAt(0) - 97;
+      const row = Number(from[1]);
+      if (match.board[row]?.[col]?.color !== match.playerColor) {
+        return { destinations: [] };
+      }
+      const destinations = getLegalMovesForPiece(match.board, row, col)
+        .map(({ row: destinationRow, col: destinationCol }) =>
+          `${String.fromCharCode(97 + destinationCol)}${destinationRow}`);
+      return { destinations };
     },
 
     advanceMatch,
