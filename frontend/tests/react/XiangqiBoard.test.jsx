@@ -1,5 +1,5 @@
 // CLEAN-04: test render + tương tác click-chọn-quân-rồi-đi của XiangqiBoard (jsdom).
-import { fireEvent, render } from '@testing-library/react';
+import { act, fireEvent, render } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import XiangqiBoard from '../../src/presentation/components/board/XiangqiBoard.jsx';
 
@@ -45,8 +45,18 @@ function stubSvgGeometry(svg) {
 
 function renderBoard(props = {}) {
   const onMove = vi.fn();
+  const onSelectPiece = vi.fn();
   const view = render(
-    <XiangqiBoard pieces={openingPieces()} readOnly={false} interactive playerColor="red" onMove={onMove} {...props} />,
+    <XiangqiBoard
+      pieces={openingPieces()}
+      readOnly={false}
+      interactive
+      playerColor="red"
+      legalMoves={{ from: 'a3', destinations: ['a4'] }}
+      onMove={onMove}
+      onSelectPiece={onSelectPiece}
+      {...props}
+    />,
   );
   const svg = view.container.querySelector('svg.xiangqi-board');
   stubSvgGeometry(svg);
@@ -55,7 +65,7 @@ function renderBoard(props = {}) {
     fireEvent.click(svg, { clientX: x, clientY: y });
   };
   const pieceNode = (position) => view.container.querySelector(`[data-position="${position}"]`);
-  return { ...view, svg, onMove, clickAt, pieceNode };
+  return { ...view, svg, onMove, onSelectPiece, clickAt, pieceNode };
 }
 
 describe('XiangqiBoard: hiển thị', () => {
@@ -85,6 +95,47 @@ describe('XiangqiBoard: hiển thị', () => {
     expect(letters).toEqual([...FILES].reverse());
   });
 
+  it('vẽ hai đường chéo giao nhau thành chữ X trong cả hai cung Tướng', () => {
+    const { container } = renderBoard();
+    const diagonals = [...container.querySelectorAll('.board-lines line')].slice(-4);
+    const expected = [
+      ['d9', 'f7'],
+      ['f9', 'd7'],
+      ['d0', 'f2'],
+      ['f0', 'd2'],
+    ];
+
+    expect(diagonals).toHaveLength(expected.length);
+    diagonals.forEach((line, index) => {
+      const [from, to] = expected[index];
+      const start = svgPointOf(from);
+      const end = svgPointOf(to);
+      expect(line.getAttribute('x1')).toBe(String(start.x));
+      expect(line.getAttribute('y1')).toBe(String(start.y));
+      expect(line.getAttribute('x2')).toBe(String(end.x));
+      expect(line.getAttribute('y2')).toBe(String(end.y));
+    });
+  });
+
+  it('vẽ dấu giao điểm bốn góc rõ ràng tại đủ vị trí tốt và pháo', () => {
+    const { container } = renderBoard();
+    const marks = [...container.querySelectorAll('.board-position-mark')];
+    const markAt = (position) => container.querySelector(`[data-mark-position="${position}"]`);
+
+    expect(marks).toHaveLength(14);
+    expect(markAt('b2').querySelectorAll('path')).toHaveLength(4);
+    expect(markAt('c3').querySelectorAll('path')).toHaveLength(4);
+    expect(markAt('a3').querySelectorAll('path')).toHaveLength(2);
+    expect(markAt('i6').querySelectorAll('path')).toHaveLength(2);
+    const cannonPoint = svgPointOf('b2');
+    expect(markAt('b2').querySelector('path')).toHaveAttribute(
+      'd',
+      expect.stringContaining(
+        `M ${cannonPoint.x - 24} ${cannonPoint.y - 24} h 18 M ${cannonPoint.x - 24} ${cannonPoint.y - 24} v 18`,
+      ),
+    );
+  });
+
   it('bỏ qua quân có vị trí hoặc loại quân không hợp lệ thay vì vỡ giao diện', () => {
     const pieces = [
       { id: 'ok', color: 'red', type: 'general', position: 'e0' },
@@ -109,6 +160,48 @@ describe('XiangqiBoard: hiển thị', () => {
     expect(getByRole('status')).toHaveTextContent('3');
   });
 
+  it('đánh dấu nước đi mới nhất ở cả ô xuất phát và ô đến', () => {
+    const { container } = renderBoard({
+      lastMove: { color: 'black', from: 'a6', to: 'a5' },
+    });
+    const marker = container.querySelector('.last-move-marker');
+    const origin = svgPointOf('a6');
+    const destination = svgPointOf('a5');
+
+    expect(marker).toHaveClass('last-move-black');
+    expect(marker.querySelector('.last-move-origin')).toHaveAttribute(
+      'd',
+      expect.stringContaining(`M ${origin.x - 13} ${origin.y - 31}`),
+    );
+    expect(marker.querySelector('.last-move-destination')).toHaveAttribute(
+      'd',
+      expect.stringContaining(`M ${destination.x - 16} ${destination.y - 36}`),
+    );
+  });
+
+  it('giữ đúng quân qua lần đổi vị trí để quân lướt tới ô mới thay vì bị vẽ lại', () => {
+    const sourcePiece = { id: 'red-soldier-a3', color: 'red', type: 'soldier', position: 'a3' };
+    const props = {
+      pieces: [sourcePiece],
+      readOnly: false,
+      interactive: false,
+      playerColor: 'red',
+      animateMoves: true,
+    };
+    const { container, rerender } = render(<XiangqiBoard {...props} />);
+    const originalNode = container.querySelector('[data-position="a3"]');
+
+    rerender(
+      <XiangqiBoard
+        {...props}
+        pieces={[{ ...sourcePiece, id: 'red-soldier-a4', position: 'a4' }]}
+        lastMove={{ color: 'red', from: 'a3', to: 'a4' }}
+      />,
+    );
+
+    expect(container.querySelector('[data-position="a4"]')).toBe(originalNode);
+  });
+
   it('highlight Tướng bị chiếu quanh đúng quân Tướng của bên bị chiếu', () => {
     const { container } = renderBoard({ checkedColor: 'black' });
     const circle = container.querySelector('.check-highlight-layer circle');
@@ -122,16 +215,33 @@ describe('XiangqiBoard: hiển thị', () => {
 });
 
 describe('XiangqiBoard: đi quân bằng click', () => {
-  it('chọn quân của mình rồi bấm ô đích thì gọi onMove(từ, đến) và bỏ chọn', () => {
-    const { clickAt, onMove, pieceNode } = renderBoard();
+  it('chọn quân yêu cầu nước hợp lệ, hiện dấu gợi ý rồi bấm điểm đến để đi', () => {
+    const { clickAt, onMove, onSelectPiece, pieceNode, container } = renderBoard();
     clickAt('a3');
     expect(pieceNode('a3')).toHaveClass('is-selected');
+    expect(onSelectPiece).toHaveBeenCalledWith('a3');
+    expect(container.querySelector('.selection-energy-ring-outer')).toBeInTheDocument();
+    expect(container.querySelector('.selection-energy-ring-inner')).toBeInTheDocument();
+    expect(container.querySelector('.selection-energy-glow')).toBeNull();
+    expect(container.querySelector('[data-destination="a4"]')).toBeInTheDocument();
+    expect(container.querySelectorAll('.legal-move-marker')).toHaveLength(1);
+    expect(container.querySelector('.legal-move-energy-layer')).toBeNull();
     expect(onMove).not.toHaveBeenCalled();
 
-    clickAt('a4');
+    fireEvent.click(container.querySelector('[data-destination="a4"]'));
     expect(onMove).toHaveBeenCalledTimes(1);
     expect(onMove).toHaveBeenCalledWith('a3', 'a4');
     expect(pieceNode('a3')).not.toHaveClass('is-selected');
+  });
+
+  it('nút ô đích nhận cả thao tác bàn phím', () => {
+    const { clickAt, container, onMove } = renderBoard();
+    clickAt('a3');
+    const destination = container.querySelector('[data-destination="a4"]');
+
+    expect(destination).toHaveAttribute('role', 'button');
+    fireEvent.keyDown(destination, { key: 'Enter' });
+    expect(onMove).toHaveBeenCalledWith('a3', 'a4');
   });
 
   it('bấm lại đúng quân đang chọn thì bỏ chọn, bấm quân mình khác thì đổi chọn', () => {
@@ -148,10 +258,27 @@ describe('XiangqiBoard: đi quân bằng click', () => {
   });
 
   it('chọn quân rồi bấm vào quân đối phương = đi ăn quân (onMove tới ô của quân đó)', () => {
-    const { clickAt, onMove } = renderBoard();
+    const { clickAt, onMove } = renderBoard({
+      legalMoves: { from: 'b2', destinations: ['b9'] },
+    });
     clickAt('b2'); // Pháo đỏ
     clickAt('b9'); // Mã đen
     expect(onMove).toHaveBeenCalledWith('b2', 'b9');
+  });
+
+  it('không cho đi đến ô không nằm trong danh sách nước hợp lệ từ máy chủ', () => {
+    const { clickAt, onMove, pieceNode } = renderBoard();
+    clickAt('a3');
+    clickAt('a2');
+    expect(onMove).not.toHaveBeenCalled();
+    expect(pieceNode('a3')).toHaveClass('is-selected');
+  });
+
+  it('kéo thả không còn thực hiện nước đi', () => {
+    const { svg, onMove } = renderBoard();
+    fireEvent.pointerDown(svg, { pointerId: 1, clientX: 54, clientY: 650 });
+    fireEvent.pointerUp(svg, { pointerId: 1, clientX: 54, clientY: 550 });
+    expect(onMove).not.toHaveBeenCalled();
   });
 
   it('không chọn được quân của đối phương', () => {
@@ -176,6 +303,24 @@ describe('XiangqiBoard: đi quân bằng click', () => {
     expect(onMove).not.toHaveBeenCalled();
   });
 
+  it('ẩn vòng chọn và điểm đến ngay khi lượt đi bị khóa', () => {
+    const { clickAt, container, rerender } = renderBoard();
+    clickAt('a3');
+    expect(container.querySelector('.selection-energy-layer')).toBeInTheDocument();
+
+    rerender(
+      <XiangqiBoard
+        pieces={openingPieces()}
+        readOnly={false}
+        interactive={false}
+        playerColor="red"
+        legalMoves={{ from: 'a3', destinations: ['a4'] }}
+      />,
+    );
+    expect(container.querySelector('.selection-energy-layer')).toBeNull();
+    expect(container.querySelector('.legal-move-layer')).toBeNull();
+  });
+
   it('khoá thao tác khi đang chờ server xác nhận nước đi trước (movePending)', () => {
     const { clickAt, onMove } = renderBoard({ movePending: true });
     clickAt('a3');
@@ -184,7 +329,11 @@ describe('XiangqiBoard: đi quân bằng click', () => {
   });
 
   it('góc nhìn Đen: ánh xạ toạ độ chuột về đúng ô khi lật bàn cờ', () => {
-    const { clickAt, onMove } = renderBoard({ orientation: 'black', playerColor: 'black' });
+    const { clickAt, onMove } = renderBoard({
+      orientation: 'black',
+      playerColor: 'black',
+      legalMoves: { from: 'a6', destinations: ['a5'] },
+    });
     clickAt('a6');
     clickAt('a5');
     expect(onMove).toHaveBeenCalledWith('a6', 'a5');
@@ -206,5 +355,38 @@ describe('XiangqiBoard: đi quân bằng click', () => {
     rerender(<XiangqiBoard pieces={moved} readOnly={false} interactive playerColor="red" onMove={onMove} />);
     expect(container.querySelector('.is-selected')).toBeNull();
     expect(container.querySelector('[data-position="a4"]')).toBeInTheDocument();
+  });
+
+  it('làm quân cờ trượt qua vị trí trung gian trước khi đến đích', () => {
+    const frames = [];
+    let nextFrameId = 0;
+    vi.stubGlobal('requestAnimationFrame', (callback) => {
+      frames.push(callback);
+      nextFrameId += 1;
+      return nextFrameId;
+    });
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+
+    const initial = openingPieces();
+    const { pieceNode, rerender } = renderBoard({ pieces: initial });
+    const start = pieceNode('a3').getAttribute('transform');
+    const moved = initial.map((piece) => (
+      piece.id === 'red-soldier-a' ? { ...piece, position: 'a4' } : piece
+    ));
+
+    rerender(<XiangqiBoard pieces={moved} readOnly={false} interactive playerColor="red" />);
+    expect(pieceNode('a4')).toHaveAttribute('transform', start);
+
+    act(() => frames.shift()(1000));
+    act(() => frames.shift()(1260));
+    const intermediate = pieceNode('a4').getAttribute('transform');
+    expect(intermediate).not.toBe(start);
+    expect(intermediate).not.toBe(`translate(${svgPointOf('a4').x} ${svgPointOf('a4').y})`);
+
+    act(() => frames.shift()(1520));
+    expect(pieceNode('a4')).toHaveAttribute(
+      'transform',
+      `translate(${svgPointOf('a4').x} ${svgPointOf('a4').y})`,
+    );
   });
 });

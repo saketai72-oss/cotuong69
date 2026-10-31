@@ -6,7 +6,7 @@ import './styles.css';
 /**
  * Chọn màn hình React theo URL:
  *  - `?pveMatchId=<id>` : màn hình chơi với máy (PVE-UI)
- *  - còn lại            : màn hình trận PvP/demo (`?matchId=`) hoặc không render gì (lobby JS cũ)
+ *  - còn lại            : Màn hình trận PvP/demo (`?matchId=` / `?roomCode=`) hoặc sảnh cũ
  */
 export default function Root() {
   const params = new URLSearchParams(window.location.search);

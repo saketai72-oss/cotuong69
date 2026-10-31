@@ -139,6 +139,22 @@ function getLegalMoveError(pieces, color, fromPosition, toPosition) {
   return null;
 }
 
+function getLegalMoveDestinations(pieces, color, fromPosition) {
+  const from = parsePosition(fromPosition);
+  if (!from || (color !== 'red' && color !== 'black')) return [];
+
+  const board = toGridBoard(pieces);
+  const piece = board[from.rank][from.file];
+  if (!piece || piece.color !== color) return [];
+
+  return getPseudoMoves(board, from.rank, from.file)
+    .filter((move) => {
+      if (board[move.row][move.col]?.type === 'K') return false;
+      return leavesGeneralSafe(board, color, from, { file: move.col, rank: move.row });
+    })
+    .map((move) => positionOf(move.col, move.row));
+}
+
 function hasLegalMove(pieces, color) {
   const board = toGridBoard(pieces);
   for (let row = 0; row < board.length; row += 1) {
@@ -157,6 +173,7 @@ function hasLegalMove(pieces, color) {
 
 module.exports = {
   getLegalMoveError,
+  getLegalMoveDestinations,
   hasLegalMove,
   isInCheck,
   parsePosition,

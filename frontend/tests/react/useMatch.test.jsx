@@ -179,6 +179,76 @@ describe('useMatch', () => {
   });
 
   describe('gửi nước đi', () => {
+    it('yêu cầu danh sách điểm đến hợp lệ từ máy chủ khi chọn quân', async () => {
+      const { result } = await renderConnectedMatch();
+      lastSocket().receive({ type: 'welcome', color: 'red', state: MATCH });
+
+      let accepted;
+      act(() => { accepted = result.current.requestLegalMoves('a3'); });
+      expect(accepted).toBe(true);
+      expect(lastSocket().sent).toContainEqual({ type: 'legalMoves', from: 'a3' });
+
+      lastSocket().receive({
+        type: 'legalMovesResult',
+        from: 'a3',
+        destinations: ['a4'],
+      });
+      expect(result.current.legalMoves).toEqual({ from: 'a3', destinations: ['a4'] });
+    });
+
+    it('trận phòng thật dùng RoomHub cho snapshot, gợi ý nước đi và gửi nước đi', async () => {
+      const { result } = renderHook(() => useMatch(null, { roomCode: '123456' }));
+      await waitFor(() => expect(sockets()).toHaveLength(1));
+      expect(fetchMock).not.toHaveBeenCalled();
+
+      const socket = lastSocket();
+      expect(socket.url).toMatch(/\/ws\/room\/123456$/);
+      socket.open();
+      socket.receive({
+        type: 'Connected',
+        role: 'PLAYER',
+        side: 'RED',
+        snapshot: {
+          matchId: 'MATCH_ROOM',
+          roomCode: '123456',
+          status: 'active',
+          currentTurn: 'red',
+          board: [],
+          plyCount: 0,
+          remainingClocks: { red: 300, black: 300 },
+        },
+      });
+
+      expect(result.current.color).toBe('red');
+      expect(result.current.readOnly).toBe(false);
+      expect(result.current.match.matchCode).toBe('123456');
+      expect(result.current.loading).toBe(false);
+
+      act(() => { result.current.requestLegalMoves('a3'); });
+      expect(socket.sent).toContainEqual({ type: 'legalMoves', from: 'a3' });
+      socket.receive({ type: 'legalMovesResult', from: 'a3', destinations: ['a4'] });
+      expect(result.current.legalMoves).toEqual({ from: 'a3', destinations: ['a4'] });
+
+      act(() => { result.current.sendMove('a3', 'a4'); });
+      expect(socket.sent).toContainEqual({ type: 'move', from: 'a3', to: 'a4' });
+      socket.receive({
+        type: 'moveResult',
+        accepted: true,
+        snapshot: {
+          matchId: 'MATCH_ROOM',
+          roomCode: '123456',
+          status: 'active',
+          currentTurn: 'black',
+          board: [],
+          plyCount: 1,
+          remainingClocks: { red: 299, black: 300 },
+        },
+      });
+      expect(result.current.movePending).toBe(false);
+      expect(result.current.match.currentTurn).toBe('black');
+      expect(result.current.match.moveNumber).toBe(2);
+    });
+
     it('chưa có kết nối thì không gửi và báo lỗi cho người chơi', async () => {
       const { result } = renderHook(() => useMatch('COT-615'));
       await waitFor(() => expect(sockets()).toHaveLength(1)); // socket còn CONNECTING

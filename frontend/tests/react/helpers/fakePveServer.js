@@ -98,7 +98,7 @@ export function createFakePveServer({ playerColor = 'red', requireToken = true, 
     await Promise.resolve();
 
     if (requireToken && !headers.Authorization) return fail(401, 'NO_TOKEN', 'Thiếu token');
-    const route = String(url).replace(/^.*\/api\/pve/, '').match(/^\/matches\/(\d+)(?:\/(moves|resign))?$/);
+    const route = String(url).replace(/^.*\/api\/pve/, '').match(/^\/matches\/(\d+)(?:\/(moves|legal-moves|resign))?$/);
     if (!route) return fail(404, 'NOT_FOUND', 'Không tìm thấy đường dẫn.');
     if (Number(route[1]) !== state.id) return fail(404, 'MATCH_NOT_FOUND', 'Không tìm thấy trận đấu');
     const action = route[2] || null;
@@ -106,6 +106,18 @@ export function createFakePveServer({ playerColor = 'red', requireToken = true, 
     if (action === null && method === 'GET') {
       checkTimeout();
       return json(200, { success: true, match: view() });
+    }
+
+    if (action === 'legal-moves' && method === 'POST') {
+      checkTimeout();
+      const { from } = body || {};
+      if (state.status !== 'PLAYING' || state.sideToMove !== state.playerColor) {
+        return json(200, { success: true, destinations: [] });
+      }
+      if (from === 'a3' && state.board[3][0]?.color === state.playerColor) {
+        return json(200, { success: true, destinations: ['a4'] });
+      }
+      return json(200, { success: true, destinations: [] });
     }
 
     if (action === 'moves' && method === 'POST') {

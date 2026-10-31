@@ -157,7 +157,7 @@ describe('useRoomSignaling', () => {
       await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
     }
     expect(sockets()).toHaveLength(5);
-    expect(result.current.error).toMatch(/Không kết nối được kênh gọi video/);
+    expect(result.current.error).toMatch(/Không kết nối được máy chủ phòng/);
   });
 
   it('tháo hook: đóng socket và không còn kết nối lại', async () => {

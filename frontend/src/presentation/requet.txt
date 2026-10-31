@@ -1,0 +1,116 @@
+Description
+
+Xây dựng giao diện bàn cờ Cờ Tướng dựa trên trạng thái Match từ máy chủ.
+
+Phạm vi:
+
+• Hiển thị bàn cờ:
+
+Bàn cờ chuẩn 9 cột x 10 hàng giao điểm, đường sông ở giữa hàng 4 và 5, hai cung Tướng có đường chéo.
+
+Render 32 quân cờ ban đầu: Bên Đỏ (e0, d0, f0, c0, g0, b0, h0, a0, i0, b2, h2, các Tốt hàng 3); Bên Đen (vị trí tương ứng phía Đen).
+
+Hiển thị hai người chơi, bên Đỏ và bên Đen, người đang tới lượt, đồng hồ lượt.
+
+• Khởi tạo trận và đếm ngược:
+
+Sau khi phân bên Đỏ/Đen, hiển thị countdown 3-2-1 trước khi cho phép đi quân.
+
+Bên Đỏ luôn đi trước.
+
+• Quyền Khán giả:
+
+Khán giả nhìn thấy toàn bộ bàn cờ nhưng hoàn toàn ở chế độ chỉ xem, không điều khiển được quân cờ.
+
+Tiêu chí chấp nhận:
+
+Bàn cờ hiển thị đúng trạng thái ban đầu do máy chủ trả về.
+
+Hiển thị đúng bên Đỏ/Đen và người đi trước.
+
+Có đếm ngược 3-2-1 trước khi bắt đầu nước đầu tiên.
+
+Khán giả chỉ có quyền xem.
+
+Tích hợp hiệu ứng âm thanh, hình ảnh khi ăn quân và cảnh báo khi Tướng bị Chiếu.
+
+
+Phạm vi:
+
+• Hiệu ứng âm thanh:
+
+Phát âm thanh gõ quân cờ đanh chắc khi thực hiện nước đi hợp lệ.
+
+Phát âm thanh ăn cờ khi có quân bị loại khỏi bàn cờ.
+
+Hỗ trợ nút bật/tắt âm thanh trong cài đặt trận đấu.
+
+• Cảnh báo Chiếu Tướng:
+
+Khi máy chủ báo trạng thái Chiếu: Hiển thị cảnh báo "Chiếu Tướng!" nổi bật trên màn hình.
+
+Tô đỏ ô của Tướng đang bị Chiếu để người chơi dễ nhận biết.
+
+Khi trạng thái Chiếu kết thúc, xóa ngay cảnh báo trên giao diện.
+
+• Khán giả:
+
+Nhìn thấy cảnh báo Chiếu và nghe âm thanh nhưng chỉ ở chế độ xem.
+
+Tiêu chí chấp nhận:
+
+Phát âm thanh đúng lúc khi đi quân và ăn quân.
+
+Cảnh báo Chiếu Tướng hiển thị đúng bên đang bị Chiếu.
+
+Khi không còn Chiếu, cảnh báo được xóa theo trạng thái mới.
+
+Có chức năng bật/tắt âm thanh.
+
+
+
+Xây dựng logic Kéo thả (Drag & Drop) và tương tác di chuyển cho toàn bộ 32 quân cờ trên bàn cờ.
+
+Phạm vi:
+
+• Tương tác chọn quân và di chuyển (gộp chung cho toàn bộ 7 loại quân cờ: Tướng, Sĩ, Tượng, Xe, Pháo, Mã, Tốt):
+
+Bắt sự kiện kéo thả (Drag & Drop) và click chọn ô nguồn/đích mượt mà trên cả chuột máy tính và màn hình cảm ứng.
+
+Khi tới lượt: Người chơi chỉ được chọn các quân cờ thuộc phe của mình (Đỏ hoặc Đen).
+
+Khi chọn quân: Chỉ tô sáng (highlight) duy nhất quân đang được chọn.
+
+• Ràng buộc hiển thị nghiêm ngặt:
+
+TUYỆT ĐỐI KHÔNG hiển thị các ô có thể đi hoặc vòng tròn gợi ý nước đi hợp lệ.
+
+Người chơi phải tự ghi nhớ luật cờ, tự quan sát bàn cờ và tự quyết định ô đích.
+
+• Xử lý góc nhìn và tọa độ bàn cờ:
+
+Hỗ trợ xoay bàn cờ theo góc nhìn của người chơi (người chơi bên Đen nhìn bàn cờ từ phía dưới lên).
+
+Chuẩn hóa tọa độ chuyển đổi: Tọa độ gửi lên máy chủ luôn chuẩn xác theo hệ tọa độ chuẩn bàn cờ 9x10 (a0-i9 / 0-8, 0-9) bất kể góc nhìn hiển thị.
+
+• Xử lý gửi lệnh và phản hồi từ máy chủ:
+
+Gửi tọa độ nguồn và ô đích lên máy chủ qua kênh thời gian thực (WebSocket).
+
+Chống gửi trùng: Khóa thao tác gửi nước đi tiếp theo trong thời gian đang chờ máy chủ phản hồi (debounce/throttle).
+
+Nước đi hợp lệ: Máy chủ xác nhận -> Cập nhật vị trí quân cờ, phát âm thanh nước đi/ăn quân, chuyển lượt cho đối thủ.
+
+Nước đi không hợp lệ (như Mã cản chân, Tượng cản mắt, Pháo ăn không ngòi, Tốt đi lùi, Tướng lộ mặt hoặc tự đưa Tướng vào thế bị chiếu): Giữ nguyên bàn cờ, trả quân về vị trí cũ mượt mà, hiển thị cảnh báo, không đổi lượt và không đặt lại đồng hồ.
+
+Tiêu chí chấp nhận:
+
+Tương tác kéo thả và click di chuyển mượt mà trên toàn bộ 32 quân cờ cho cả chuột và cảm ứng.
+
+Chỉ duy nhất quân đang chọn được highlight; tuyệt đối không hiển thị gợi ý ô đến.
+
+Tọa độ gửi lên máy chủ luôn chính xác bất kể góc nhìn bàn cờ xoay hay không xoay.
+
+Nước đi sai luật bị hủy bỏ mượt mà, trả quân về ô cũ, không làm thay đổi trạng thái bàn cờ hay đồng hồ.
+
+Nước đi hợp lệ được đồng bộ và cập nhật vị trí tức thì.

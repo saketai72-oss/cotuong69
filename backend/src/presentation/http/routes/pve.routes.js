@@ -118,7 +118,7 @@ function createPveHandler({
         return;
       }
 
-      const matchRoute = pathname.match(/^\/api\/pve\/matches\/([^/]+)(?:\/(moves|resign))?$/);
+      const matchRoute = pathname.match(/^\/api\/pve\/matches\/([^/]+)(?:\/(moves|legal-moves|resign))?$/);
       if (matchRoute) {
         const matchId = parseMatchId(matchRoute[1]);
         const action = matchRoute[2] || null;
@@ -139,6 +139,17 @@ function createPveHandler({
             move: { from: body.from, to: body.to },
           });
           sendJson(response, 200, toResponse(result));
+          return;
+        }
+
+        if (action === 'legal-moves') {
+          const body = await parseJsonBody(request);
+          const result = await service.getLegalMoves({
+            userId: user.id,
+            matchId,
+            from: body.from,
+          });
+          sendJson(response, 200, { success: true, ...result });
           return;
         }
 

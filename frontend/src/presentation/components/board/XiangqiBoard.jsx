@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import './XiangqiBoard.css';
 
 const BOARD = {
@@ -49,20 +49,22 @@ function BoardGrid() {
   });
 
   const topLeft = point(3, 9);
-  const topRight = point(5, 9);
-  const topCenter = point(4, 7);
+  const topRight = point(5, 7);
+  const topFarRight = point(5, 9);
+  const topOpposite = point(3, 7);
   const bottomLeft = point(3, 0);
-  const bottomRight = point(5, 0);
-  const bottomCenter = point(4, 2);
+  const bottomRight = point(5, 2);
+  const bottomFarRight = point(5, 0);
+  const bottomOpposite = point(3, 2);
 
   return (
     <g className="board-lines">
       {horizontalLines}
       {verticalLines}
-      <line x1={topLeft.x} y1={topLeft.y} x2={topCenter.x} y2={topCenter.y} />
-      <line x1={topRight.x} y1={topRight.y} x2={topCenter.x} y2={topCenter.y} />
-      <line x1={bottomLeft.x} y1={bottomLeft.y} x2={bottomCenter.x} y2={bottomCenter.y} />
-      <line x1={bottomRight.x} y1={bottomRight.y} x2={bottomCenter.x} y2={bottomCenter.y} />
+      <line x1={topLeft.x} y1={topLeft.y} x2={topRight.x} y2={topRight.y} />
+      <line x1={topFarRight.x} y1={topFarRight.y} x2={topOpposite.x} y2={topOpposite.y} />
+      <line x1={bottomLeft.x} y1={bottomLeft.y} x2={bottomRight.x} y2={bottomRight.y} />
+      <line x1={bottomFarRight.x} y1={bottomFarRight.y} x2={bottomOpposite.x} y2={bottomOpposite.y} />
     </g>
   );
 }
@@ -70,30 +72,35 @@ function BoardGrid() {
 function BoardDetails() {
   const markedPoints = [
     [1, 2], [7, 2], [1, 7], [7, 7],
-    [2, 3], [4, 3], [6, 3], [2, 6], [4, 6], [6, 6]
+    [0, 3], [2, 3], [4, 3], [6, 3], [8, 3],
+    [0, 6], [2, 6], [4, 6], [6, 6], [8, 6]
   ];
 
   return (
     <g className="board-details" aria-hidden="true">
       {markedPoints.map(([fileIndex, rank]) => {
         const { x, y } = point(fileIndex, rank);
-        const inset = 5;
-        const arm = 10;
+        const outer = 24;
+        const arm = 18;
         const leftMark = fileIndex > 0;
         const rightMark = fileIndex < 8;
 
         return (
-          <g key={`mark-${fileIndex}-${rank}`}>
+          <g
+            key={`mark-${fileIndex}-${rank}`}
+            className="board-position-mark"
+            data-mark-position={`${FILES[fileIndex]}${rank}`}
+          >
             {leftMark && (
               <>
-                <path d={`M ${x - inset} ${y - inset} h -${arm} v ${arm}`} />
-                <path d={`M ${x - inset} ${y + inset} h -${arm} v -${arm}`} />
+                <path d={`M ${x - outer} ${y - outer} h ${arm} M ${x - outer} ${y - outer} v ${arm}`} />
+                <path d={`M ${x - outer} ${y + outer} h ${arm} M ${x - outer} ${y + outer} v -${arm}`} />
               </>
             )}
             {rightMark && (
               <>
-                <path d={`M ${x + inset} ${y - inset} h ${arm} v ${arm}`} />
-                <path d={`M ${x + inset} ${y + inset} h ${arm} v -${arm}`} />
+                <path d={`M ${x + outer} ${y - outer} h -${arm} M ${x + outer} ${y - outer} v ${arm}`} />
+                <path d={`M ${x + outer} ${y + outer} h -${arm} M ${x + outer} ${y + outer} v -${arm}`} />
               </>
             )}
           </g>
@@ -110,23 +117,57 @@ function BoardDetails() {
   );
 }
 
-function Piece({ piece, orientation, selected, interactive, dragPoint }) {
-  if (!piece || typeof piece.position !== 'string' || !/^[a-i][0-9]$/i.test(piece.position)) {
+function Piece({ piece, orientation, selected, interactive }) {
+  const validPosition = typeof piece?.position === 'string' && /^[a-i][0-9]$/i.test(piece.position);
+  const fileIndex = validPosition ? FILES.indexOf(piece.position[0].toLowerCase()) : 0;
+  const rank = validPosition ? Number(piece.position.slice(1)) : 0;
+  const targetPoint = point(fileIndex, rank, orientation);
+  const [renderPoint, setRenderPoint] = useState(targetPoint);
+  const renderPointRef = useRef(targetPoint);
+  const orientationRef = useRef(orientation);
+  const label = piece ? PIECE_LABELS[piece.type] : null;
+
+  if (!validPosition || fileIndex < 0 || rank < 0 || rank > 9 || !label) {
     return null;
   }
 
-  const fileIndex = FILES.indexOf(piece.position[0].toLowerCase());
-  const rank = Number(piece.position.slice(1));
-  const { x, y } = dragPoint || point(fileIndex, rank, orientation);
-  const label = PIECE_LABELS[piece.type];
+  useEffect(() => {
+    const nextPoint = point(fileIndex, rank, orientation);
+    if (orientationRef.current !== orientation) {
+      orientationRef.current = orientation;
+      renderPointRef.current = nextPoint;
+      setRenderPoint(nextPoint);
+      return undefined;
+    }
 
-  if (fileIndex < 0 || rank < 0 || rank > 9 || !label) {
-    return null;
-  }
+    const startPoint = renderPointRef.current;
+    if (startPoint.x === nextPoint.x && startPoint.y === nextPoint.y) return undefined;
+
+    const duration = 520;
+    let frameId;
+    let startTime;
+    const animate = (timestamp) => {
+      if (startTime === undefined) startTime = timestamp;
+      const progress = Math.min(1, (timestamp - startTime) / duration);
+      const eased = 1 - ((1 - progress) ** 3);
+      const currentPoint = {
+        x: startPoint.x + ((nextPoint.x - startPoint.x) * eased),
+        y: startPoint.y + ((nextPoint.y - startPoint.y) * eased),
+      };
+      renderPointRef.current = currentPoint;
+      setRenderPoint(currentPoint);
+      if (progress < 1) frameId = window.requestAnimationFrame(animate);
+    };
+
+    frameId = window.requestAnimationFrame(animate);
+    return () => window.cancelAnimationFrame(frameId);
+  }, [fileIndex, orientation, rank]);
+
+  const { x, y } = renderPoint;
 
   return (
     <g
-      className={`xiangqi-piece ${piece.color}${selected ? ' is-selected' : ''}${interactive ? ' is-interactive' : ''}${dragPoint ? ' is-lifted' : ''}`}
+      className={`xiangqi-piece ${piece.color}${selected ? ' is-selected' : ''}${interactive ? ' is-interactive' : ''}`}
       transform={`translate(${x} ${y})`}
       aria-label={`${piece.color === 'red' ? 'Đỏ' : 'Đen'} ${label} tại ${piece.position}`}
       aria-pressed={selected}
@@ -185,6 +226,24 @@ function getPositionAt(svg, clientX, clientY, orientation) {
   return `${FILES[orientation === 'black' ? 8 - displayFile : displayFile]}${displayRank}`;
 }
 
+function getPositionPoint(position, orientation) {
+  if (typeof position !== 'string' || !/^[a-i][0-9]$/i.test(position)) return null;
+  return point(FILES.indexOf(position[0].toLowerCase()), Number(position.slice(1)), orientation);
+}
+
+function getCornerPath({ x, y }, halfSize, cornerSize) {
+  const left = x - halfSize;
+  const right = x + halfSize;
+  const top = y - halfSize;
+  const bottom = y + halfSize;
+  return [
+    `M ${left + cornerSize} ${top} H ${left} V ${top + cornerSize}`,
+    `M ${right - cornerSize} ${top} H ${right} V ${top + cornerSize}`,
+    `M ${left} ${bottom - cornerSize} V ${bottom} H ${left + cornerSize}`,
+    `M ${right} ${bottom - cornerSize} V ${bottom} H ${right - cornerSize}`,
+  ].join(' ');
+}
+
 export default function XiangqiBoard({
   pieces,
   countdown = null,
@@ -194,13 +253,16 @@ export default function XiangqiBoard({
   movePending = false,
   orientation = 'red',
   checkedColor = null,
+  legalMoves = null,
+  lastMove = null,
+  lastMoves = null,
+  animateMoves = false,
   captureEffect = null,
+  onSelectPiece = () => {},
   onMove = () => {},
 }) {
   const [selectedPieceId, setSelectedPieceId] = useState(null);
-  const [dragPoint, setDragPoint] = useState(null);
-  const dragRef = useRef(null);
-  const suppressClickRef = useRef(false);
+  const pieceIdentityRef = useRef(new Map());
   const selectedPiece = pieces.find((piece) => piece.id === selectedPieceId);
   const checkedGeneral = checkedColor
     ? pieces.find((piece) => piece.type === 'general' && piece.color === checkedColor)
@@ -220,81 +282,95 @@ export default function XiangqiBoard({
     : null;
   const coordinates = orientation === 'black' ? [...FILES].reverse() : [...FILES];
   const boardPositionSignature = pieces.map((piece) => `${piece.id}:${piece.position}`).join('|');
+  const pieceRenderIds = useMemo(() => {
+    const identities = new Map(pieceIdentityRef.current);
+    const moves = Array.isArray(lastMoves) ? lastMoves : lastMove ? [lastMove] : [];
+    if (animateMoves) {
+      moves.forEach((move) => {
+        const from = typeof move.from === 'string'
+          ? move.from
+          : move.from && Number.isInteger(move.from.row) && Number.isInteger(move.from.col)
+            ? `${FILES[move.from.col]}${move.from.row}`
+            : null;
+        const to = typeof move.to === 'string'
+          ? move.to
+          : move.to && Number.isInteger(move.to.row) && Number.isInteger(move.to.col)
+            ? `${FILES[move.to.col]}${move.to.row}`
+            : null;
+        const movingPiece = pieces.find((piece) => piece.position === from);
+        const identity = identities.get(from) ||
+          (movingPiece ? { id: movingPiece.id, color: movingPiece.color, type: movingPiece.type } : null);
+        if (!from || !to || !identity) return;
+        identities.delete(from);
+        identities.delete(to);
+        identities.set(to, identity);
+      });
+    } else {
+      identities.clear();
+    }
+
+    const nextIdentities = new Map();
+    const renderIds = new Map();
+    pieces.forEach((piece) => {
+      const currentIdentity = identities.get(piece.position);
+      const identity = currentIdentity?.color === piece.color && currentIdentity?.type === piece.type
+        ? currentIdentity
+        : { id: piece.id, color: piece.color, type: piece.type };
+      nextIdentities.set(piece.position, identity);
+      renderIds.set(piece.position, identity.id);
+    });
+    pieceIdentityRef.current = nextIdentities;
+    return renderIds;
+  }, [animateMoves, lastMove, lastMoves, pieces]);
+  const legalDestinations = interactive && selectedPiece && legalMoves?.from === selectedPiece.position
+    ? legalMoves.destinations
+    : [];
+  const selectedPoint = interactive && selectedPiece
+    ? getPositionPoint(selectedPiece.position, orientation)
+    : null;
+  const lastMoveFromPoint = getPositionPoint(lastMove?.from, orientation);
+  const lastMoveToPoint = getPositionPoint(lastMove?.to, orientation);
 
   useEffect(() => {
     setSelectedPieceId(null);
-    setDragPoint(null);
-    dragRef.current = null;
   }, [boardPositionSignature, interactive, orientation]);
-
-  function handlePointerDown(event) {
-    if (!interactive || movePending) return;
-    const pieceNode = event.target.closest('[data-piece-id]');
-    if (!pieceNode) return;
-
-    const piece = pieces.find((candidate) => candidate.id === pieceNode.dataset.pieceId);
-    if (!piece || piece.color !== playerColor) return;
-    setSelectedPieceId(piece.id);
-    suppressClickRef.current = true;
-    const svgPoint = toSvgPoint(event.currentTarget, event.clientX, event.clientY);
-    dragRef.current = {
-      pointerId: event.pointerId,
-      from: piece.position,
-      pieceId: piece.id,
-      wasSelected: selectedPieceId === piece.id,
-    };
-    if (svgPoint) setDragPoint({ pieceId: piece.id, x: svgPoint.x, y: svgPoint.y });
-    event.currentTarget.setPointerCapture(event.pointerId);
-  }
-
-  function handlePointerMove(event) {
-    if (!interactive || dragRef.current?.pointerId !== event.pointerId) return;
-    const svgPoint = toSvgPoint(event.currentTarget, event.clientX, event.clientY);
-    if (svgPoint) {
-      setDragPoint({ pieceId: dragRef.current.pieceId, x: svgPoint.x, y: svgPoint.y });
-    }
-  }
-
-  function handlePointerUp(event) {
-    const drag = dragRef.current;
-    if (!drag || drag.pointerId !== event.pointerId) return;
-    const target = getPositionAt(event.currentTarget, event.clientX, event.clientY, orientation);
-    dragRef.current = null;
-    setDragPoint(null);
-
-    if (target && target !== drag.from) {
-      suppressClickRef.current = true;
-      setSelectedPieceId(null);
-      onMove(drag.from, target);
-    } else if (target === drag.from && drag.wasSelected) {
-      suppressClickRef.current = false;
-    } else if (event.type === 'pointercancel') {
-      suppressClickRef.current = false;
-    }
-    window.setTimeout(() => {
-      suppressClickRef.current = false;
-    }, 0);
-  }
 
   function handleClick(event) {
     if (!interactive || movePending) return;
-    if (suppressClickRef.current) {
-      suppressClickRef.current = false;
-      return;
-    }
     const targetPosition = getPositionAt(event.currentTarget, event.clientX, event.clientY, orientation);
     if (!targetPosition) return;
 
     const targetPiece = pieces.find((piece) => piece.position === targetPosition);
     if (targetPiece?.color === playerColor) {
-      setSelectedPieceId(targetPiece.id === selectedPieceId ? null : targetPiece.id);
+      if (targetPiece.id === selectedPieceId) {
+        setSelectedPieceId(null);
+      } else {
+        setSelectedPieceId(targetPiece.id);
+        onSelectPiece(targetPiece.position);
+      }
       return;
     }
 
     if (selectedPiece) {
-      onMove(selectedPiece.position, targetPosition);
-      setSelectedPieceId(null);
+      const isLegalDestination = legalDestinations.includes(targetPosition);
+      if (isLegalDestination) {
+        onMove(selectedPiece.position, targetPosition);
+        setSelectedPieceId(null);
+      }
     }
+  }
+
+  function handleLegalDestinationClick(event, destination) {
+    event.stopPropagation();
+    if (!interactive || movePending || !selectedPiece || !legalDestinations.includes(destination)) return;
+    onMove(selectedPiece.position, destination);
+    setSelectedPieceId(null);
+  }
+
+  function handleLegalDestinationKeyDown(event, destination) {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    handleLegalDestinationClick(event, destination);
   }
 
   return (
@@ -307,10 +383,6 @@ export default function XiangqiBoard({
         viewBox="0 0 900 1000"
         role={interactive ? 'application' : 'img'}
         aria-label={`Bàn cờ Tướng 9 cột 10 hàng với ${pieces.length} quân${readOnly ? ', chế độ chỉ xem' : ''}`}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
         onClick={handleClick}
       >
         <defs>
@@ -327,9 +399,9 @@ export default function XiangqiBoard({
             <path d="M -20 34 C 24 20 54 46 96 32 S 156 22 202 37 M -18 70 C 22 56 58 81 103 66 S 158 60 198 73" fill="none" stroke="#4c2c19" strokeOpacity=".22" strokeWidth="1" />
           </pattern>
           <linearGradient id="board-paper" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#f6e9cc" />
-            <stop offset="48%" stopColor="#efddb8" />
-            <stop offset="100%" stopColor="#ead3a8" />
+            <stop offset="0%" stopColor="#eee0bf" />
+            <stop offset="48%" stopColor="#e4d0a8" />
+            <stop offset="100%" stopColor="#dcc497" />
           </linearGradient>
           <radialGradient id="piece-ivory" cx=".29" cy=".2" r=".88">
             <stop offset="0%" stopColor="#fffef5" />
@@ -434,15 +506,72 @@ export default function XiangqiBoard({
         <g className="pieces-layer">
           {pieces.map((piece) => (
             <Piece
-              key={piece.id}
+              key={pieceRenderIds.get(piece.position)}
               piece={piece}
               orientation={orientation}
               selected={piece.id === selectedPieceId}
               interactive={interactive && piece.color === playerColor}
-              dragPoint={dragPoint?.pieceId === piece.id ? dragPoint : null}
             />
           ))}
         </g>
+        {legalDestinations.length > 0 && (
+          <g className="legal-move-layer" aria-label="Các vị trí có thể đi">
+            {legalDestinations.map((destination) => {
+              const destinationPoint = getPositionPoint(destination, orientation);
+              const targetPiece = pieces.find((piece) => piece.position === destination);
+              if (!destinationPoint) return null;
+              return (
+                <g
+                  key={destination}
+                  className={`legal-move-marker${targetPiece ? ' is-capture-target' : ''}`}
+                  transform={`translate(${destinationPoint.x} ${destinationPoint.y})`}
+                  aria-label={`${targetPiece ? 'Ăn quân tại' : 'Đi đến'} ${destination}`}
+                  data-destination={destination}
+                  role="button"
+                  tabIndex={0}
+                  onClick={(event) => handleLegalDestinationClick(event, destination)}
+                  onKeyDown={(event) => handleLegalDestinationKeyDown(event, destination)}
+                >
+                  <circle className="legal-move-hit-area" r="25" />
+                  {targetPiece ? (
+                    <path d={getCornerPath({ x: 0, y: 0 }, 35, 10)} />
+                  ) : (
+                    <>
+                      <circle className="legal-move-target-ring" r="18" />
+                      <circle className="legal-move-glow" r="13" />
+                      <circle className="legal-move-dot" r="6" />
+                    </>
+                  )}
+                </g>
+              );
+            })}
+          </g>
+        )}
+        {lastMoveFromPoint && lastMoveToPoint && (
+          <g
+            className={`last-move-marker last-move-${lastMove.color || 'red'}`}
+            aria-label={`Nước đi gần nhất: ${lastMove.from} đến ${lastMove.to}`}
+          >
+            <path
+              className="last-move-origin"
+              d={getCornerPath(lastMoveFromPoint, 31, 18)}
+            />
+            <path
+              className="last-move-destination"
+              d={getCornerPath(lastMoveToPoint, 36, 20)}
+            />
+          </g>
+        )}
+        {interactive && selectedPoint && (
+          <g
+            className="selection-energy-layer"
+            transform={`translate(${selectedPoint.x} ${selectedPoint.y})`}
+            aria-hidden="true"
+          >
+            <circle className="selection-energy-ring selection-energy-ring-outer" r="38" />
+            <circle className="selection-energy-ring selection-energy-ring-inner" r="36" />
+          </g>
+        )}
       </svg>
       <div className="board-coordinate coordinate-bottom">
         {coordinates.map((file) => <span key={file}>{file}</span>)}

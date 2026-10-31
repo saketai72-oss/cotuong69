@@ -8,6 +8,7 @@ const { test, describe } = require('node:test');
 const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
+const { JSDOM } = require('jsdom');
 
 const ROOT = path.resolve(__dirname, '..');
 const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
@@ -51,6 +52,15 @@ describe('CLEAN-04: hợp đồng DOM giữa js/*.js và index.html', () => {
       seen.add(id);
     }
     assert.deepStrictEqual([...duplicated], [], `id bị trùng: ${[...duplicated].join(', ')}`);
+  });
+
+  test('các hộp thoại xác thực không nằm bên trong roomModal bị ẩn', () => {
+    const document = new JSDOM(html).window.document;
+    for (const id of ['loginModal', 'registerModal', 'forgotPasswordModal', 'resetPasswordModal']) {
+      const modal = document.getElementById(id);
+      assert.ok(modal, `phải có hộp thoại #${id}`);
+      assert.strictEqual(modal.parentElement, document.body, `#${id} phải là phần tử con trực tiếp của body`);
+    }
   });
 
   test('BE-14: ô nhập mã phòng cho phép 10 ký tự (mã riêng tư) chứ không chỉ 6 chữ số', () => {

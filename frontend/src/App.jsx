@@ -112,6 +112,8 @@ function App() {
     movePending,
     moveError,
     sendMove,
+    legalMoves,
+    requestLegalMoves,
     clearMoveError,
     reconnectState,
     simulateSelfDisconnect,
@@ -179,9 +181,9 @@ function App() {
   }, []);
 
   useEffect(() => {
-    document.body.classList.toggle('match-view', Boolean(matchId));
+    document.body.classList.toggle('match-view', Boolean(matchId || roomCode));
     return () => document.body.classList.remove('match-view');
-  }, [matchId]);
+  }, [matchId, roomCode]);
 
   const lastMove = match?.lastMove;
   const lastMoveKey = lastMove
@@ -220,18 +222,18 @@ function App() {
     return () => window.clearTimeout(timeout);
   }, [moveError, clearMoveError]);
 
-  if (!matchId) {
+  if (!matchId && !roomCode) {
     return null;
   }
 
-  if (loading && !match) {
+  if (loading && !match && !error) {
     return <main className="request-state" role="status">Đang tải trạng thái trận đấu…</main>;
   }
 
   if (!match) {
     return (
       <main className="request-state request-error" role="alert">
-        <strong>Không tải được trận đấu {matchId}</strong>
+        <strong>{roomCode ? `Không thể kết nối phòng ${roomCode}` : `Không tải được trận đấu ${matchId}`}</strong>
         <span>{error || 'Máy chủ chưa trả về trạng thái Match.'}</span>
         <span>Hãy kiểm tra backend đang chạy tại địa chỉ trong `VITE_API_URL`.</span>
       </main>
@@ -242,6 +244,11 @@ function App() {
   const countdown = isStarting ? match.countdownSeconds : null;
   const currentTurn = isStarting ? null : match.currentTurn;
   const activePlayer = currentTurn === 'red' || currentTurn === 'black' ? currentTurn : null;
+  const playerTurnHint = isStarting
+    ? 'Chờ trận bắt đầu để chọn quân.'
+    : currentTurn !== color
+      ? `Đang đến lượt quân ${currentTurn === 'red' ? 'Đỏ' : 'Đen'}. Hãy đợi đối thủ đi xong.`
+      : 'Chọn một quân để xem các vị trí có thể đi.';
   const checkedColor = match.checkedColor ||
     (match.check === true || match.inCheck === true ? match.currentTurn : null);
   const checkedGeneral = checkedColor
@@ -439,9 +446,13 @@ function App() {
                 reconnectState.canMove
               }
               movePending={movePending}
+              legalMoves={legalMoves}
               orientation={color === 'black' ? 'black' : 'red'}
               checkedColor={checkedGeneral ? checkedColor : null}
+              lastMove={lastMove}
+              animateMoves={Boolean(roomCode)}
               captureEffect={captureEffect}
+              onSelectPiece={requestLegalMoves}
               onMove={sendMove}
             />
             <PlayerCard
@@ -490,7 +501,7 @@ function App() {
           ) : (
             <div className="spectator-note player-instructions">
               <span className="spectator-icon" aria-hidden="true">♟</span>
-              <span><strong>Bạn đang chơi bên {color === 'red' ? 'Đỏ' : 'Đen'}</strong><br />Chọn quân rồi chạm ô đích, hoặc kéo quân đến ô muốn đi.</span>
+              <span><strong>Bạn đang chơi bên {color === 'red' ? 'Đỏ' : 'Đen'}</strong><br />{playerTurnHint}</span>
               <span className="spectator-lock" aria-hidden="true">
                 {reconnectState.selfDisconnected
                   ? 'Mạng chập chờn — đang tạm khóa'
@@ -498,7 +509,9 @@ function App() {
                     ? 'Đối thủ mất kết nối — tạm dừng'
                     : movePending
                       ? 'Đang gửi nước đi…'
-                      : 'Không hiển thị gợi ý nước đi'}
+                      : currentTurn === color
+                        ? 'Nhấn quân của bạn để chọn nước đi'
+                        : 'Chưa tới lượt bạn'}
               </span>
             </div>
           )}
@@ -627,4 +640,3 @@ function App() {
 }
 
 export default App;
-

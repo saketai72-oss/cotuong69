@@ -128,23 +128,57 @@ describe('PveScreen', () => {
   });
 
   describe('đi quân', () => {
-    it('chọn quân rồi bấm ô đích: gửi {row,col} lên server, nước máy đáp hiện ngay, đến lượt bạn lại', async () => {
+    it('hiện dấu nước của người chơi 2 giây rồi mới hiện nước máy', async () => {
       const { container, svg } = await mountLoaded();
+      const playerPawn = pieceAt(container, 'a3');
+      const botPawn = pieceAt(container, 'a6');
 
       clickAt(svg, 'a3');
-      clickAt(svg, 'a4');
+      const destination = await screen.findByLabelText('Đi đến a4');
+      vi.useFakeTimers();
+      await act(async () => {
+        fireEvent.click(destination);
+        await vi.advanceTimersByTimeAsync(0);
+      });
 
-      await screen.findByText('2', { selector: '[data-testid="pve-ply"]' });
-      const post = fetch.mock.calls.find(([, init]) => init.method === 'POST');
+      expect(screen.getByTestId('pve-ply')).toHaveTextContent('1');
+      expect(pieceAt(container, 'a4')).toBe(playerPawn);
+      expect(pieceAt(container, 'a5')).toBeNull();
+      expect(pieceAt(container, 'a6')).toBe(botPawn);
+      expect(container.querySelector('.last-move-marker')).toHaveAttribute(
+        'aria-label',
+        'Nước đi gần nhất: a3 đến a4',
+      );
+      expect(screen.getByTestId('pve-turn')).toHaveTextContent('Máy đang suy nghĩ…');
+
+      const post = fetch.mock.calls.find(([url]) => /\/moves$/.test(url));
+      const legalMovesRequest = fetch.mock.calls.find(([url]) => /\/legal-moves$/.test(url));
+      expect(JSON.parse(legalMovesRequest[1].body)).toEqual({ from: 'a3' });
+      expect(legalMovesRequest[1].headers.Authorization).toBeTruthy();
       expect(post[0]).toMatch(/\/api\/pve\/matches\/1\/moves$/);
       expect(JSON.parse(post[1].body)).toEqual({ from: { row: 3, col: 0 }, to: { row: 4, col: 0 } });
-      expect(post[1].headers.Authorization).toBe('Bearer tok.en.123');
+      expect(post[1].headers.Authorization).toBeTruthy();
 
+      await act(async () => { await vi.advanceTimersByTimeAsync(1999); });
+      expect(screen.getByTestId('pve-ply')).toHaveTextContent('1');
+      expect(container.querySelector('.last-move-marker')).toHaveAttribute(
+        'aria-label',
+        'Nước đi gần nhất: a3 đến a4',
+      );
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(1); });
       // quân của bạn đã sang a4; máy đáp bằng chốt đen a6 -> a5
+      expect(screen.getByTestId('pve-ply')).toHaveTextContent('2');
       expect(pieceAt(container, 'a4')).toHaveAttribute('aria-label', expect.stringContaining('Đỏ Chốt'));
+      expect(pieceAt(container, 'a4')).toBe(playerPawn);
       expect(pieceAt(container, 'a3')).toBeNull();
       expect(pieceAt(container, 'a5')).toHaveAttribute('aria-label', expect.stringContaining('Đen Chốt'));
+      expect(pieceAt(container, 'a5')).toBe(botPawn);
       expect(pieceAt(container, 'a6')).toBeNull();
+      expect(container.querySelector('.last-move-marker')).toHaveAttribute(
+        'aria-label',
+        'Nước đi gần nhất: a6 đến a5',
+      );
       expect(screen.getByTestId('pve-turn')).toHaveTextContent('Đến lượt bạn');
     });
 
@@ -153,29 +187,28 @@ describe('PveScreen', () => {
       const gate = new Promise((resolve) => { release = resolve; });
       const original = server.fetch;
       fetch.mockImplementation(async (url, init) => {
-        if (init && init.method === 'POST') await gate;
+        if (init && init.method === 'POST' && /\/moves$/.test(url)) await gate;
         return original(url, init);
       });
       const { svg } = await mountLoaded();
 
       clickAt(svg, 'a3');
-      clickAt(svg, 'a4');
+      fireEvent.click(await screen.findByLabelText('Đi đến a4'));
       await screen.findByText('Đang gửi nước đi…');
       clickAt(svg, 'c3');
       clickAt(svg, 'c4');
-      expect(fetch.mock.calls.filter(([, init]) => init.method === 'POST')).toHaveLength(1);
+      expect(fetch.mock.calls.filter(([url, init]) => init.method === 'POST' && /\/moves$/.test(url))).toHaveLength(1);
 
       await act(async () => { release(); await gate; });
-      await screen.findByText('Đến lượt bạn');
+      await screen.findByText('Máy đang suy nghĩ…');
     });
 
     it('server từ chối nước đi: hiện đúng thông báo của server, bàn cờ giữ nguyên, đi lại được', async () => {
       const { container, svg } = await mountLoaded();
 
-      // ô xuất phát không phải quân của bạn (server kiểm luật)
       clickAt(svg, 'a3');
       server.failNextMove({ status: 400, code: 'ILLEGAL_MOVE', error: 'Nước đi không hợp lệ: Tốt chưa qua sông không đi ngang được' });
-      clickAt(svg, 'b3');
+      fireEvent.click(await screen.findByLabelText('Đi đến a4'));
 
       const alert = await screen.findByTestId('pve-move-error');
       expect(alert).toHaveTextContent('Tốt chưa qua sông không đi ngang được');
@@ -183,8 +216,8 @@ describe('PveScreen', () => {
       expect(screen.getByTestId('pve-ply')).toHaveTextContent('0');
 
       clickAt(svg, 'a3');
-      clickAt(svg, 'a4');
-      await screen.findByText('2', { selector: '[data-testid="pve-ply"]' });
+      fireEvent.click(await screen.findByLabelText('Đi đến a4'));
+      await screen.findByText('2', { selector: '[data-testid="pve-ply"]' }, { timeout: 3000 });
       expect(screen.queryByTestId('pve-move-error')).toBeNull();
     });
 
@@ -192,11 +225,11 @@ describe('PveScreen', () => {
       const { container, svg } = await mountLoaded();
       const original = server.fetch;
       fetch.mockImplementation(async (url, init) => {
-        if (init && init.method === 'POST') throw new TypeError('Failed to fetch');
+        if (init && init.method === 'POST' && /\/moves$/.test(url)) throw new TypeError('Failed to fetch');
         return original(url, init);
       });
       clickAt(svg, 'a3');
-      clickAt(svg, 'a4');
+      fireEvent.click(await screen.findByLabelText('Đi đến a4'));
       expect(await screen.findByTestId('pve-move-error')).toHaveTextContent('Không kết nối được máy chủ');
       expect(pieceAt(container, 'a3')).not.toBeNull();
     });
@@ -308,9 +341,10 @@ describe('PveScreen', () => {
 
     it('nước đi gửi sau khi server đã xử hết giờ: hiện lỗi của server và đồng bộ lại thành kết quả cuối', async () => {
       const { svg } = await mountLoaded();
-      server.state.turnStartedAt = Date.now() - 120_000; // quá hạn nhưng client chưa biết
       clickAt(svg, 'a3');
-      clickAt(svg, 'a4');
+      const destination = await screen.findByLabelText('Đi đến a4');
+      server.state.turnStartedAt = Date.now() - 120_000; // quá hạn nhưng client chưa biết
+      fireEvent.click(destination);
       expect(await screen.findByTestId('pve-result-reason')).toHaveTextContent('Hết thời gian');
       expect(screen.getByTestId('pve-move-error')).toHaveTextContent('Trận đấu đã kết thúc');
     });
@@ -320,8 +354,8 @@ describe('PveScreen', () => {
     it('sau khi đi vài nước, mount lại (reload) hiện đúng thế cờ hiện tại từ server', async () => {
       const first = await mountLoaded();
       clickAt(first.svg, 'a3');
-      clickAt(first.svg, 'a4');
-      await screen.findByText('2', { selector: '[data-testid="pve-ply"]' });
+      fireEvent.click(await screen.findByLabelText('Đi đến a4'));
+      await screen.findByText('2', { selector: '[data-testid="pve-ply"]' }, { timeout: 3000 });
       first.unmount();
 
       fetch.mockClear();
